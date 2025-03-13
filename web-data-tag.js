@@ -32,6 +32,7 @@ function dataTagParseResponse(str) {
  * @param {string} requestPath - The request path.
  * @param {string} [dataLayerEventName] - The data layer event name.
  * @param {string} [dataLayerVariableName] - The data layer variable name.
+ * @param {string} ucLocalStorageKey - The local storage key.
  */
 function dataTagSendData(data, gtmServerDomain, requestPath, dataLayerEventName, dataLayerVariableName, ucLocalStorageKey) {
     dataLayerEventName = dataLayerEventName || false;
@@ -177,7 +178,7 @@ function dataTagSendData(data, gtmServerDomain, requestPath, dataLayerEventName,
           pushToDataLayer();
         }
       };
-      xhr.send(stringifiedData);
+      // xhr.send(stringifiedData);
 }
 
 /**
