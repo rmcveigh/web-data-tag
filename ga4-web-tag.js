@@ -66,23 +66,6 @@ function ucSendNavigatorBeacon(url) {
 }
 
 /**
- * Creates an iterator for an array.
- * @param {Array} a - The array to iterate over.
- * @returns {Function} The iterator function.
- */
-function ucCreateArrayIterator(a) {
-  var b = 0;
-  return function () {
-    return b < a.length ? {
-      done: !1,
-      value: a[b++],
-    } : {
-      done: !0,
-    };
-  };
-}
-
-/**
  * Pushes event data to the data layer.
  */
 function ucPushEventToDataLayer() {
@@ -191,86 +174,6 @@ function ucSendFetchRequest(gtmServerDomain, requestPath, stringifiedData, repla
 }
 
 /**
- * Sends a POST request using XMLHttpRequest.
- * @param {string} gtmServerDomain - The GTM server domain.
- * @param {string} requestPath - The request path.
- * @param {string} stringifiedData - The stringified data to send.
- * @param {Object} replacements - The replacements object.
- * @param {string} ucEventName - The data layer event name.
- * @param {string} ucDataLayerName - The data layer variable name.
- * @param {boolean} waitForCookies - Whether to wait for cookies.
- * @param {number} ucPendingCookies - The count of running set cookie operations.
- * @param {Object} ucEventData - The event data layer data.
- */
-function ucSendXhrRequest(gtmServerDomain, requestPath, stringifiedData, replacements, ucEventName, ucDataLayerName, waitForCookies, ucPendingCookies, ucEventData) {
-  var xhr = new XMLHttpRequest();
-  xhr.open('POST', gtmServerDomain + requestPath);
-  xhr.setRequestHeader('Content-type', 'text/plain');
-  xhr.withCredentials = true;
-
-  var ucResponseBuffer = '';
-  var ucBytesLoaded = 0;
-
-  xhr.onprogress = function (progress) {
-    if ((xhr.status === 200) && xhr.responseText.startsWith('event: message\ndata: ')) {
-      ucResponseBuffer += xhr.responseText.substring(ucBytesLoaded);
-      ucBytesLoaded = progress.loaded;
-
-      for (var replacedResponse = ucReplaceTemplateVars(ucResponseBuffer, replacements), nextSeparationPos = replacedResponse.indexOf('\n\n'); -1 !== nextSeparationPos;) {
-        var parsedData;
-        a: {
-          var iterableLines;
-          var lines = replacedResponse.substring(0, nextSeparationPos).split('\n'),
-            linesIterator = 'undefined' != typeof Symbol && Symbol.iterator && lines[Symbol.iterator];
-          if (linesIterator) {
-            iterableLines = linesIterator.call(lines);
-          } else if ('number' == typeof lines.length) {
-            iterableLines = {
-              next: ucCreateArrayIterator(lines),
-            };
-          } else {
-            throw Error(String(lines) + ' is not an iterable or ArrayLike');
-          }
-          var eventNameLine = iterableLines.next().value,
-            eventDataLine = iterableLines.next().value;
-          if (eventNameLine.startsWith('event: message') && eventDataLine.startsWith('data: ')) {
-            try {
-              parsedData = JSON.parse(eventDataLine.substring(eventDataLine.indexOf(':') + 1));
-              break a;
-            } catch (e) {
-            }
-          }
-          parsedData =
-            void 0;
-        }
-        ucHandleResponseEvent(parsedData);
-        replacedResponse = replacedResponse.substring(nextSeparationPos + 2);
-        nextSeparationPos = replacedResponse.indexOf('\n\n');
-      }
-    }
-  };
-  xhr.onload = function () {
-    if (xhr.status.toString()[0] !== '2') {
-      console.error(xhr.status + '> ' + xhr.statusText);
-    }
-
-    if (ucEventName && ucDataLayerName) { // data tag configured to push event
-      if (!xhr.responseText.startsWith('event: message\ndata: ')) { // old protocol
-        ucEventData = ucParseJsonResponse(xhr.responseText);
-        ucEventData.status = xhr.status;
-        ucPushEventToDataLayer();
-      } else if (
-        !waitForCookies // data tag configured to push event instantly
-        || (ucPendingCookies === 0) // no cookies received or all cookies already set
-      ) {
-        ucPushEventToDataLayer();
-      }
-    }
-  };
-  xhr.send(stringifiedData);
-}
-
-/**
  * Sends data to the GTM Server Side Container.
  * @param {Object} data - The data to send.
  * @param {string} gtmServerDomain - The GTM server domain.
@@ -278,10 +181,10 @@ function ucSendXhrRequest(gtmServerDomain, requestPath, stringifiedData, replace
  * @param {string} [ucEventName] - The data layer event name.
  * @param {string} [ucDataLayerName] - The data layer variable name.
  * @param {boolean} [waitForCookies] - Whether to wait for cookies.
- * @param {boolean} [useFetchInsteadOfXHR] - Whether to use Fetch API instead of XHR.
+ * @param {boolean} [alwaysPostData] - Whether to always send data or not.
  * @param {string} consentKey - The key for the target consent value in UC.
  */
-function ucTransmitData(data, gtmServerDomain, requestPath, ucEventName, ucDataLayerName, waitForCookies, useFetchInsteadOfXHR, consentKey) {
+function ucTransmitData(data, gtmServerDomain, requestPath, ucEventName, ucDataLayerName, waitForCookies, alwaysPostData, consentKey) {
   ucEventName = ucEventName || false;
   ucDataLayerName = ucDataLayerName || 'data_layer_variable';
   waitForCookies = waitForCookies || false;
@@ -290,20 +193,22 @@ function ucTransmitData(data, gtmServerDomain, requestPath, ucEventName, ucDataL
   var stringifiedData = JSON.stringify(data);
   var replacements = { transport_url: gtmServerDomain };
   var ucPendingCookies = 0;
-  var okToSend = false;
-
-  var currentDataLayer = (typeof window !== 'undefined' && window.dataLayer) || (typeof dataLayer !== 'undefined' && dataLayer) || [];
-  // Do not send anything if they have not consented to a service.
-  if (currentDataLayer && currentDataLayer.length > 0) {
-    currentDataLayer.forEach(function (layer) {
-      if (typeof layer === 'object') {
-        Object.keys(layer).forEach(function (key) {
-          if (key === consentKey) {
-            okToSend = layer[key];
-          }
-        });
-      }
-    });
+  var okToSend = alwaysPostData;
+  // We can move on if we always want to send data.
+  if (!okToSend) {
+    var currentDataLayer = (typeof window !== 'undefined' && window.dataLayer) || (typeof dataLayer !== 'undefined' && dataLayer) || [];
+    // Do not send anything if they have not consented to a service.
+    if (currentDataLayer && currentDataLayer.length > 0) {
+      currentDataLayer.forEach(function (layer) {
+        if (typeof layer === 'object') {
+          Object.keys(layer).forEach(function (key) {
+            if (key === consentKey) {
+              okToSend = layer[key];
+            }
+          });
+        }
+      });
+    }
   }
 
   if (!okToSend) {
@@ -311,35 +216,5 @@ function ucTransmitData(data, gtmServerDomain, requestPath, ucEventName, ucDataL
     return;
   }
 
-  if (useFetchInsteadOfXHR) {
-    ucSendFetchRequest(gtmServerDomain, requestPath, stringifiedData, replacements, ucEventName, ucDataLayerName, waitForCookies, ucPendingCookies, ucEventData);
-  } else {
-    ucSendXhrRequest(gtmServerDomain, requestPath, stringifiedData, replacements, ucEventName, ucDataLayerName, waitForCookies, ucPendingCookies, ucEventData);
-  }
-}
-
-/**
- * Retrieves data from the GTM container.
- * @param {string} containerId - The container ID.
- * @returns {Object} The data tag data.
- */
-function ucCollectPageData(containerId) {
-  window.ucPageData = {
-    document: {
-      characterSet: window.document.characterSet,
-    },
-    innerWidth: window.innerWidth,
-    innerHeight: window.innerHeight,
-    screen: {
-      width: window.screen.width,
-      height: window.screen.height,
-    },
-    dataModel: window.google_tag_manager[containerId].dataLayer.get({
-      split: function () {
-        return [];
-      },
-    }),
-  };
-
-  return window.ucPageData;
+  ucSendFetchRequest(gtmServerDomain, requestPath, stringifiedData, replacements, ucEventName, ucDataLayerName, waitForCookies, ucPendingCookies, ucEventData);
 }
