@@ -33,9 +33,25 @@ function dataTagParseResponse(str) {
  * @param {string} [dataLayerEventName] - The data layer event name.
  * @param {string} [dataLayerVariableName] - The data layer variable name.
  */
-function dataTagSendData(data, gtmServerDomain, requestPath, dataLayerEventName, dataLayerVariableName) {
+function dataTagSendData(data, gtmServerDomain, requestPath, dataLayerEventName, dataLayerVariableName, ucLocalStorageKey) {
     dataLayerEventName = dataLayerEventName || false;
     dataLayerVariableName = dataLayerVariableName || false;
+    const storedData = localStorage.getItem(ucLocalStorageKey);
+    if (storedData) {
+      // Parse data if it was stored as JSON
+      try {
+        const parsedData = JSON.parse(storedData);
+        // Use the retrieved data
+        console.log(parsedData);
+      } catch (error) {
+        // Handle the case where data is not valid JSON
+        console.error('Error parsing JSON:', error);
+        //If data was not JSON, use it as a string
+        console.log(storedData);
+      }
+    } else {
+      return;
+    }
 
     var replaceVariable = function(a, b) {
             return a.replace(/\$\{([^\}]+)\}/g, function(c, d) {
