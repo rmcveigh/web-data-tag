@@ -1,0 +1,13 @@
+{
+  "name": "data-tag-utils",
+  "version": "1.0.0",
+  "description": "Data tag utilities for tracking",
+  "main": "ga4-web-tag.js",
+  "scripts": {
+    "minify": "terser ga4-web-tag.js -o ga4-web-tag.min.js --compress --mangle",
+    "build": "npm run minify"
+  },
+  "devDependencies": {
+    "terser": "^5.22.0"
+  }
+}
