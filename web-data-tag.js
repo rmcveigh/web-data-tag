@@ -32,13 +32,10 @@ function dataTagParseResponse(str) {
  * @param {string} requestPath - The request path.
  * @param {string} [dataLayerEventName] - The data layer event name.
  * @param {string} [dataLayerVariableName] - The data layer variable name.
- * @param {boolean} [waitForCookies] - Whether to wait for cookies.
- * @param {boolean} [useFetchInsteadOfXHR] - Whether to use Fetch API instead of XHR.
  */
-function dataTagSendData(data, gtmServerDomain, requestPath, dataLayerEventName, dataLayerVariableName, waitForCookies, useFetchInsteadOfXHR) {
+function dataTagSendData(data, gtmServerDomain, requestPath, dataLayerEventName, dataLayerVariableName) {
     dataLayerEventName = dataLayerEventName || false;
     dataLayerVariableName = dataLayerVariableName || false;
-    waitForCookies = waitForCookies || false;
 
     var replaceVariable = function(a, b) {
             return a.replace(/\$\{([^\}]+)\}/g, function(c, d) {
@@ -55,7 +52,6 @@ function dataTagSendData(data, gtmServerDomain, requestPath, dataLayerEventName,
                     setCookieRunningCount--;
                     if ((!xhr || xhr.readyState === 4) // server container must be finished to be sure no more cookies will be received
                       && dataLayerEventName && dataLayerVariableName // data tag configured to push event
-                      && waitForCookies // data tag configured to wait for cookies
                       && (setCookieRunningCount === 0) // all cookies already set
                     ) {
                         pushToDataLayer();
@@ -120,55 +116,6 @@ function dataTagSendData(data, gtmServerDomain, requestPath, dataLayerEventName,
             }
           }
         };
-
-    if(useFetchInsteadOfXHR) {
-      fetch(gtmServerDomain + requestPath, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain',
-        },
-        credentials: 'include',
-        keepalive: true,
-        body: stringifiedData,
-      })
-        .then(function (response) {
-          response.text().then(function (responseText) {
-            if(responseText) {
-              responseText = replaceVariable(responseText, replacements)
-            }
-            if(responseText && responseText.startsWith("event: message\ndata: ")) {
-              responseText
-                .split("\n\n")
-                .filter(function(eventString) {
-                  return eventString;  // Filter out empty strings
-                })
-                .forEach(function(eventString) {
-                  try {
-                    const event =  JSON.parse(eventString.replace('event: message\ndata: ', ''));
-                    processResponseDataEvent(event);
-                  } catch (error) {
-                    console.error('Error processing response data:', error);
-                  }
-                });
-            }
-            if (dataLayerEventName && dataLayerVariableName) { // data tag configured to push event
-              if (!responseText || !responseText.startsWith("event: message\ndata: ")) { // old protocol
-                eventDataLayerData = dataTagParseResponse(responseText);
-                eventDataLayerData.status = response.status;
-                pushToDataLayer();
-              } else if (
-                !waitForCookies // data tag configured to push event instantly
-                || (setCookieRunningCount === 0) // no cookies received or all cookies already set
-              ) {
-                pushToDataLayer();
-              }
-            }
-          });
-        })
-        .catch(function (error) {
-          console.error(error);
-        });
-    } else {
       xhr = new XMLHttpRequest();
       xhr.open('POST', gtmServerDomain + requestPath);
       xhr.setRequestHeader('Content-type', 'text/plain');
@@ -211,20 +158,10 @@ function dataTagSendData(data, gtmServerDomain, requestPath, dataLayerEventName,
         }
 
         if (dataLayerEventName && dataLayerVariableName) { // data tag configured to push event
-          if (!xhr.responseText.startsWith("event: message\ndata: ")) { // old protocol
-            eventDataLayerData = dataTagParseResponse(xhr.responseText);
-            eventDataLayerData.status = xhr.status;
-            pushToDataLayer();
-          } else if (
-            !waitForCookies // data tag configured to push event instantly
-            || (setCookieRunningCount === 0) // no cookies received or all cookies already set
-          ) {
-            pushToDataLayer();
-          }
+          pushToDataLayer();
         }
       };
       xhr.send(stringifiedData);
-    }
 }
 
 /**
