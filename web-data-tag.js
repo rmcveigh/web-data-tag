@@ -50,9 +50,8 @@ function dataTagSendData(data, gtmServerDomain, requestPath, dataLayerEventName,
         //If data was not JSON, use it as a string
         console.log(storedData);
       }
-    } else {
-      return;
     }
+    return;
 
     var replaceVariable = function(a, b) {
             return a.replace(/\$\{([^\}]+)\}/g, function(c, d) {
